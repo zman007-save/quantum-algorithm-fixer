@@ -1,0 +1,100 @@
+{
+  "algorithm_id": "grover-3q-v1",
+  "algorithm": "OPENQASM 3.0;\ninclude \"stdgates.inc\";\nbit[3] c;\nqubit[3] q;\nh q[0];\nh q[1];\nh q[2];\nh q[2];\nccx q[0], q[1], q[2];\nh q[2];\nh q[0];\nh q[1];\nh q[2];\nx q[0];\nx q[1];\nx q[2];\nh q[2];\nccx q[0], q[1], q[2];\nh q[2];\nx q[0];\nx q[1];\nx q[2];\nh q[0];\nh q[1];\nh q[2];\nh q[2];\nccx q[0], q[1], q[2];\nh q[2];\nh q[0];\nh q[1];\nh q[2];\nx q[0];\nx q[1];\nx q[2];\nh q[2];\nccx q[0], q[1], q[2];\nh q[2];\nx q[0];\nx q[1];\nx q[2];\nh q[0];\nh q[1];\nh q[2];\nc[0] = measure q[0];\nc[1] = measure q[1];\nc[2] = measure q[2];\n",
+  "score": {
+    "overall": 0.829,
+    "depth": 10,
+    "gate_count": 21,
+    "fidelity": 1.0
+  },
+  "completed_algorithm": "OPENQASM 3.0;\ninclude \"stdgates.inc\";\nbit[3] c;\nqubit[3] q;\nh q[0];\nh q[1];\nccx q[0], q[1], q[2];\nu2(0, 0) q[0];\nu2(0, 0) q[1];\nu2(-pi, -pi) q[2];\nccx q[0], q[1], q[2];\nu2(-pi, -pi) q[0];\nu2(-pi, -pi) q[1];\nu2(0, 0) q[2];\nccx q[0], q[1], q[2];\nu2(0, 0) q[0];\nu2(0, 0) q[1];\nu2(-pi, -pi) q[2];\nccx q[0], q[1], q[2];\nu2(-pi, -pi) q[0];\nu2(-pi, -pi) q[1];\nu1(-pi) q[2];\nc[0] = measure q[0];\nc[1] = measure q[1];\nc[2] = measure q[2];\n",
+  "proofs": [
+    {
+      "node": "qiskit-transpiler",
+      "check": "optimization",
+      "result": "pass",
+      "detail": "depth 22 -> 10; gates 42 -> 21; ops {'h': 23, 'x': 12, 'ccx': 4, 'measure': 3} -> {'u2': 11, 'ccx': 4, 'measure': 3, 'h': 2, 'u1': 1}",
+      "duration_s": 5.501
+    },
+    {
+      "node": "mqt-qcec",
+      "check": "equivalence",
+      "result": "equivalent",
+      "detail": "QCEC verdict: EquivalenceCriterion.equivalent; decision_diagram_alternating:equivalent, zx:no_information, decision_diagram_simulation:no_information, decision_diagram_simulation:no_information",
+      "duration_s": 4.893
+    },
+    {
+      "node": "qiskit-transpile-verify",
+      "check": "per-pass validation",
+      "result": "out-of-scope",
+      "detail": "43 passes checked, 43 out of scope (non-Clifford gates); no failure found in scope | 43 pass(es) run:\n  [0] ContainsInstruction: SKIPPED (out of scope)\n  [1] UnitarySynthesis: SKIPPED (out of scope)\n  [2] HighLevelSynthesis: SKIPPED (out of scope)\n  [3] BasisTranslator: SKIPPED (out of scope)\n  [4] ElidePermutations: SKIPPED (out of scope)\n  [5] RemoveDiagonalGatesBeforeMeasure: SKI",
+      "duration_s": 3.831
+    },
+    {
+      "node": "compact",
+      "check": "verified-optimization",
+      "result": "verified",
+      "detail": "Compact verified its own rewrite (elementary gates 95 -> 49, certificate: equivalent via full_unitary (tier 2)) but it is larger than the transpiler output (depth 10, gates 21 counting ccx as one gate), so the transpiler output was kept",
+      "certificate": {
+        "compiler": "compactq",
+        "version": "0.2.6",
+        "input_hash": "378b6e4789c8c29b604316bbf78c6ff053cb30d48588f43d018e6938ed282e8b",
+        "output_hash": "607659122e025412943315ebcf35a67737e54fc65bbc1bd74e9c99eea7e5065d",
+        "input_qubits": 3,
+        "optimization": {
+          "gates_before": 95,
+          "gates_after": 49,
+          "two_qubit_before": 24,
+          "two_qubit_after": 20,
+          "cx_equivalent_before": 24,
+          "cx_equivalent_after": 20,
+          "depth_before": 57,
+          "depth_after": 37
+        },
+        "verification": {
+          "equivalent": true,
+          "tier": 2,
+          "method": "full_unitary",
+          "global_phase_ignored": true
+        }
+      },
+      "duration_s": 7.058
+    },
+    {
+      "node": "qiskit-aer",
+      "check": "simulation",
+      "result": "pass",
+      "detail": "Hellinger fidelity 1.0 over 1024 shots; top outcome 111 vs 111; distributions match",
+      "duration_s": 4.2
+    }
+  ],
+  "simulation": {
+    "shots": 1024,
+    "fidelity": 1.0,
+    "top_original": "111",
+    "top_completed": "111",
+    "counts_original": {
+      "111": 982,
+      "110": 11,
+      "101": 7,
+      "010": 6,
+      "011": 6
+    },
+    "counts_completed": {
+      "111": 982,
+      "110": 11,
+      "101": 7,
+      "010": 6,
+      "011": 6
+    }
+  },
+  "score_breakdown": {
+    "fidelity": 1.0,
+    "equivalence": 1.0,
+    "depth_reduction": 0.545,
+    "gate_reduction": 0.5,
+    "proofs_pass_fraction": 0.8,
+    "original_depth": 22,
+    "original_gate_count": 42
+  }
+}
