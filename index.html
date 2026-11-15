@@ -174,6 +174,26 @@
     margin:0;padding:13px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.6;
     color:#e8e6da;white-space:pre;border:2px solid var(--line-soft);background:#000;
   }
+  /* score reasons — breakdown beside the overall score + per-proof reasons */
+  .lr-breakdown-title{font-family:var(--mono);font-size:12.5px;line-height:1.6;color:var(--paper-dim);margin:14px 0 0}
+  .lr-breakdown-title b{color:var(--paper);font-weight:400}
+  .breakdown-grid{display:grid;grid-template-columns:repeat(4,1fr);border:2px solid var(--line-soft);margin-top:8px;background:#000}
+  @media(max-width:700px){.breakdown-grid{grid-template-columns:repeat(2,1fr)}}
+  .breakdown-cell{padding:10px 12px;border-right:2px solid var(--line-soft);border-bottom:2px solid var(--line-soft)}
+  .breakdown-cell .bv{font-family:var(--display);font-size:26px;line-height:1;color:var(--cyan)}
+  .breakdown-cell .bk{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--paper-faint);margin-top:4px;line-height:1.5}
+  .proof-row .p-reason{display:block;margin-top:5px;color:var(--paper);line-height:1.6}
+  .proof-row .p-reason .reason-lbl{color:var(--acid);text-transform:uppercase;letter-spacing:.08em;font-size:11px}
+  .proof-row.is-error{border-color:var(--danger);background:#2a0500;box-shadow:5px 5px 0 rgba(255,59,48,.55)}
+  .proof-row.is-error .p-node{color:#ffb3ae}
+  .proof-row.is-error .p-result{border-color:var(--danger);background:var(--danger);color:#fff}
+  .proof-row.is-error .p-reason{color:#ffb3ae}
+  .proof-row.is-error .p-reason .reason-lbl{color:#fff;background:var(--danger);padding:2px 6px}
+  .error-callout{
+    display:block;margin-top:8px;border:2px solid var(--danger);background:#000;color:#ffb3ae;
+    font-family:var(--mono);font-size:12.5px;line-height:1.6;padding:9px 11px;overflow-wrap:break-word;
+  }
+  .error-callout b{color:#fff;text-transform:uppercase;letter-spacing:.08em;font-weight:400}
 
   /* ---------- pipeline graph ---------- */
   .graph-shell{position:relative;padding:8px 2px 2px}
@@ -733,23 +753,67 @@ function getRecord(id){ for (var i=0;i<RECORDS.length;i++){ if (RECORDS[i].algor
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 function proofFor(rec, node){ for (var i=0;i<rec.proofs.length;i++){ if (rec.proofs[i].node===node) return rec.proofs[i]; } return null; }
 
-/* Captions are BUILT FROM the record's proofs array — never a fixed script. */
+/* A proof counts as failed / errored when its result says so — its detail
+   is then the reason and is surfaced prominently everywhere it appears. */
+function isErrorProof(p){
+  if (!p) return false;
+  var r = String(p.result || "").toLowerCase();
+  return r.indexOf("error") !== -1 || r.indexOf("fail") !== -1;
+}
+function fmtComponent(v){
+  var n = Number(v);
+  if (v == null || isNaN(n)) return "—";
+  return n.toFixed(3).replace(/(\.\d*?)0+$/,"$1").replace(/\.$/,".0");
+}
+/* Plain-text score breakdown from the record — how the overall was reached.
+   Used by the score caption, the live result, and the PDF screenplay. */
+function scoreBreakdownText(rec){
+  var bd = rec.score_breakdown || {};
+  var parts = [];
+  if (bd.fidelity != null && !isNaN(Number(bd.fidelity))) parts.push("fidelity " + fmtComponent(bd.fidelity));
+  if (bd.equivalence != null && !isNaN(Number(bd.equivalence))) parts.push("equivalence " + fmtComponent(bd.equivalence));
+  if (bd.depth_reduction != null && !isNaN(Number(bd.depth_reduction))) parts.push("depth reduction " + fmtComponent(bd.depth_reduction) + (bd.original_depth != null ? " (original depth " + bd.original_depth + " -> completed depth " + rec.score.depth + ")" : ""));
+  if (bd.gate_reduction != null && !isNaN(Number(bd.gate_reduction))) parts.push("gate reduction " + fmtComponent(bd.gate_reduction) + (bd.original_gate_count != null ? " (original gates " + bd.original_gate_count + " -> completed gates " + rec.score.gate_count + ")" : ""));
+  if (bd.proofs_pass_fraction != null && !isNaN(Number(bd.proofs_pass_fraction))) parts.push("proofs passing " + fmtComponent(bd.proofs_pass_fraction));
+  if (bd.original_depth != null) parts.push("original depth " + bd.original_depth);
+  if (bd.original_gate_count != null) parts.push("original gate count " + bd.original_gate_count);
+  return parts.join("; ");
+}
+/* Friendly step names for the five proofs, in pipeline order. */
+var PROOF_STEPS = [
+  {node: "qiskit-transpiler", label: "Transpiler"},
+  {node: "mqt-qcec", label: "QCEC"},
+  {node: "qiskit-transpile-verify", label: "Transpile-Verify"},
+  {node: "compact", label: "Compact"},
+  {node: "qiskit-aer", label: "Simulator"}
+];
+function proofLabel(node){
+  for (var i = 0; i < PROOF_STEPS.length; i++){ if (PROOF_STEPS[i].node === node) return PROOF_STEPS[i].label; }
+  return node;
+}
+
+/* Captions are BUILT FROM the record's proofs array — never a fixed script.
+   Every proof caption carries its result AND its reason (the proof's detail
+   text); a failed / errored step leads with its error as the reason. The
+   score caption carries the full score breakdown. */
 function captionFor(step, rec){
   if (step === "submit"){
     var lines = rec.algorithm.split("\n").length;
     return "algorithm received — " + lines + " lines queued as circuit \"" + rec.algorithm_id + "\"";
   }
   if (step === "score"){
-    return "overall " + rec.score.overall.toFixed(3) + " — depth " + rec.score.depth + ", " + rec.score.gate_count + " gates, fidelity " + rec.score.fidelity.toFixed(1);
+    var bdText = scoreBreakdownText(rec);
+    var base = "overall " + rec.score.overall.toFixed(3) + " — depth " + rec.score.depth + ", " + rec.score.gate_count + " gates, fidelity " + rec.score.fidelity.toFixed(1);
+    return bdText ? base + ". Score breakdown — " + bdText + "." : base + ". No score breakdown was returned in this record.";
   }
   if (step === "receipt"){
     return "record sealed — submitted + completed algorithm, score and " + rec.proofs.length + " node proofs written to sheet tab \"" + rec.algorithm_id + "\"";
   }
   var p = proofFor(rec, step);
-  if (!p) return "no proof recorded for this node";
-  var txt = p.check + " → " + p.result;
-  if (p.detail) txt += " — " + p.detail;
-  return txt;
+  if (!p) return "no proof recorded for this node — Reason: no proof was returned for this step in this run's record";
+  var reason = p.detail ? p.detail : "no detail was returned for this step";
+  if (isErrorProof(p)) return p.check + " → " + p.result + " — ERROR — Reason: " + reason;
+  return p.check + " → " + p.result + " — Reason: " + reason;
 }
 
 /* ---------- ticker ---------- */
@@ -1001,6 +1065,22 @@ function screenplayBlocks(rec){
     blocks.push({type: "character", text: pdfSafeText(NODE_LABEL[step]).toUpperCase()});
     blocks.push({type: "dialogue", text: pdfSafeText(captionFor(step, rec))});
   });
+  /* Closing section: the score breakdown, itemised — why the overall
+     score is what it is. Each proof step above already carries its own
+     result and its reason (its detail text, errors first). */
+  var bd = rec.score_breakdown || {};
+  var bdLines = ["Overall score: " + rec.score.overall.toFixed(3) + "."];
+  if (bd.fidelity != null && !isNaN(Number(bd.fidelity))) bdLines.push("Fidelity: " + fmtComponent(bd.fidelity) + ".");
+  if (bd.equivalence != null && !isNaN(Number(bd.equivalence))) bdLines.push("Equivalence: " + fmtComponent(bd.equivalence) + ".");
+  if (bd.depth_reduction != null && !isNaN(Number(bd.depth_reduction))) bdLines.push("Depth reduction: " + fmtComponent(bd.depth_reduction) + ".");
+  if (bd.gate_reduction != null && !isNaN(Number(bd.gate_reduction))) bdLines.push("Gate reduction: " + fmtComponent(bd.gate_reduction) + ".");
+  if (bd.proofs_pass_fraction != null && !isNaN(Number(bd.proofs_pass_fraction))) bdLines.push("Proofs passing: " + fmtComponent(bd.proofs_pass_fraction) + ".");
+  if (bd.original_depth != null) bdLines.push("Original depth: " + bd.original_depth + " (completed depth " + rec.score.depth + ").");
+  if (bd.original_gate_count != null) bdLines.push("Original gate count: " + bd.original_gate_count + " (completed gates " + rec.score.gate_count + ").");
+  if (bdLines.length === 1) bdLines.push("No score breakdown was returned in this run's record.");
+  blocks.push({type: "action", text: "The final number is opened up and read out in full - every component that built it, on the record."});
+  blocks.push({type: "character", text: "SCORE BREAKDOWN"});
+  blocks.push({type: "dialogue", text: pdfSafeText(bdLines.join(" "))});
   blocks.push({type: "fadeout", text: "FADE OUT."});
   return blocks;
 }
@@ -1363,14 +1443,58 @@ function validateLiveRecord(data){
 }
 function renderLiveResult(rec){
   var box = $("liveResult");
-  var proofsHtml = "";
-  rec.proofs.forEach(function(p){
-    proofsHtml +=
-      '<div class="proof-row"><span class="p-node">' + esc(p.node) + '</span>' +
-      '<span class="p-check">check: <b>' + esc(p.check) + '</b>' + (p.detail ? ' — ' + esc(p.detail) : '') + '</span>' +
-      '<span class="p-result">' + esc(p.result) + ' ✓</span></div>';
+  /* Score breakdown — shown right with the overall score so it is clear
+     how the overall number was reached. */
+  var bd = rec.score_breakdown || {};
+  var bdCells = [
+    ["Fidelity", bd.fidelity, true],
+    ["Equivalence", bd.equivalence, true],
+    ["Depth reduction", bd.depth_reduction, true],
+    ["Gate reduction", bd.gate_reduction, true],
+    ["Proofs passing", bd.proofs_pass_fraction, true],
+    ["Original depth", bd.original_depth, false],
+    ["Original gate count", bd.original_gate_count, false],
+    ["Overall score", rec.score.overall, true]
+  ];
+  var bdHtml = "";
+  bdCells.forEach(function(cell){
+    if (cell[1] == null || (cell[2] && isNaN(Number(cell[1])))) return;
+    bdHtml += '<div class="breakdown-cell"><div class="bv">' + (cell[2] ? fmtComponent(cell[1]) : esc(String(cell[1]))) + '</div><div class="bk">' + esc(cell[0]) + '</div></div>';
   });
-  if (!proofsHtml) proofsHtml = '<p class="lr-note">No node proofs were returned in this record.</p>';
+  var breakdownHtml = bdHtml
+    ? '<p class="lr-breakdown-title"><b>Why this score — score breakdown</b> · the components behind the overall score ' + rec.score.overall.toFixed(3) + ':</p><div class="breakdown-grid">' + bdHtml + '</div>'
+    : '<p class="lr-breakdown-title"><b>Why this score:</b> no score breakdown was returned in this run\'s record.</p>';
+  /* All five proofs, in pipeline order, each with its result AND its
+     reason (the proof's detail text). A failed / errored step shows its
+     error detail prominently as the reason. */
+  function proofRowHtml(p, label){
+    if (!p){
+      return '<div class="proof-row is-error"><span class="p-node">' + esc(label) + '</span>' +
+        '<span class="p-check">check: <b>—</b><span class="p-reason"><span class="reason-lbl">Reason:</span> no proof was returned for this step in this run\'s record</span></span>' +
+        '<span class="p-result">No proof</span></div>';
+    }
+    var err = isErrorProof(p);
+    var reason = p.detail ? p.detail : "no detail was returned for this step";
+    var html =
+      '<div class="proof-row' + (err ? ' is-error' : '') + '"><span class="p-node">' + esc(label) + '<br><span style="color:var(--paper-faint);font-size:11px">' + esc(p.node) + '</span></span>' +
+      '<span class="p-check">check: <b>' + esc(p.check) + '</b>' +
+      '<span class="p-reason"><span class="reason-lbl">' + (err ? 'Error — reason:' : 'Reason:') + '</span> ' + esc(reason) + '</span>' +
+      (err ? '<span class="error-callout"><b>Step ' + esc(p.result) + ' — why:</b> ' + esc(reason) + '</span>' : '') +
+      '</span>' +
+      '<span class="p-result">' + esc(p.result) + (err ? '' : ' ✓') + '</span></div>';
+    return html;
+  }
+  var proofsHtml = "";
+  var seenNodes = {};
+  PROOF_STEPS.forEach(function(stepDef){
+    var p = proofFor(rec, stepDef.node);
+    if (p) seenNodes[p.node] = true;
+    proofsHtml += proofRowHtml(p, stepDef.label);
+  });
+  rec.proofs.forEach(function(p){
+    if (!seenNodes[p.node]) proofsHtml += proofRowHtml(p, proofLabel(p.node));
+  });
+  if (!rec.proofs.length && !proofsHtml) proofsHtml = '<p class="lr-note">No node proofs were returned in this record.</p>';
   box.innerHTML =
     '<h3>Run complete ✓ — ' + esc(rec.algorithm_id) + '</h3>' +
     '<div class="score-strip">' +
@@ -1379,12 +1503,13 @@ function renderLiveResult(rec){
       '<div class="score-cell"><div class="v">' + rec.score.gate_count + '</div><div class="k">Gate count</div></div>' +
       '<div class="score-cell"><div class="v">' + rec.score.fidelity.toFixed(1) + '</div><div class="k">Fidelity</div></div>' +
     '</div>' +
+    breakdownHtml +
     '<p class="lr-note"><b>Written to the ledger:</b> this run was written to the <b>Master</b> tab and the <b>"' + esc(rec.algorithm_id) + '"</b> tab of the public Proof Ledger.</p>' +
     '<p style="margin:12px 0 0"><a class="workbook-link" href="' + esc(rec.tab_url || LEDGER_URL) + '" target="_blank" rel="noopener">View your tab ↗</a></p>' +
     '<p style="margin:12px 0 0"><a class="workbook-link" href="' + LEDGER_URL + '" target="_blank" rel="noopener">Open “Quantum Algorithm Proof Ledger” in Google Sheets ↗</a></p>' +
     '<p class="lr-note" style="margin-top:14px"><b>Completed / corrected algorithm</b></p>' +
     '<pre style="margin-top:8px">' + esc(rec.completed_algorithm || "(no completed algorithm was returned)") + '</pre>' +
-    '<p class="lr-note" style="margin-top:14px"><b>Proof from every node</b></p>' +
+    '<p class="lr-note" style="margin-top:14px"><b>Proof from every node — result &amp; reason</b></p>' +
     '<div style="margin-top:8px">' + proofsHtml + '</div>' +
     '<p class="lr-note">The full sheet for this run is also shown in the “Full sheet” section below.</p>';
   box.hidden = false;
